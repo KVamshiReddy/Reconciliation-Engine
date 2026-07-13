@@ -78,3 +78,9 @@ management:
         export:
           prometheus:
             enabled: true
+
+alpaca:
+  api-key: PKZS3WYRLUMWMKVCIMIPHTM7EK
+  api-secret: 5aapZcpX8EPbY69DnuXKahPoru3k9jBRVXzAowiMb5YS
+  base-url: https://paper-api.alpaca.markets
+  enabled: true
