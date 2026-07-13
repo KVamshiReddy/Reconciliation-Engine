@@ -80,7 +80,7 @@ management:
             enabled: true
 
 alpaca:
-  api-key: PKZS3WYRLUMWMKVCIMIPHTM7EK
-  api-secret: 5aapZcpX8EPbY69DnuXKahPoru3k9jBRVXzAowiMb5YS
+  api-key: ${ALPACA_API_KEY}
+  api-secret: ${ALPACA_API_SECRET}
   base-url: https://paper-api.alpaca.markets
-  enabled: true
+  enabled: false
