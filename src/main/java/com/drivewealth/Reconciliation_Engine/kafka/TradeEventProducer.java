@@ -74,5 +74,18 @@ public class TradeEventProducer {
         return event;
     }
 
+    public void publish(TradeEvent event) {
+        try {
+            String message = objectMapper.writeValueAsString(event);
+            kafkaTemplate.send(TOPIC, event.getSymbol(), message);
+            log.info("Published trade event: fillId={} symbol={} shares={} notional={}",
+                    event.getFillId(), event.getSymbol(),
+                    event.getShares(), event.getNotional());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to publish trade event: fillId={}", event.getFillId(), e);
+            throw new RuntimeException("Failed to publish trade event", e);
+        }
+    }
+
 }
 
