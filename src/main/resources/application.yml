@@ -83,4 +83,4 @@ alpaca:
   api-key: ${ALPACA_API_KEY}
   api-secret: ${ALPACA_API_SECRET}
   base-url: https://paper-api.alpaca.markets
-  enabled: false
+  enabled: true
