@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconciliation Engine</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+          --bg:       #f8f9fb;
+          --surface:  #ffffff;
+          --border:   #e5e7eb;
+          --border2:  #d1d5db;
+          --text:     #111827;
+          --muted:    #6b7280;
+          --hint:     #9ca3af;
+          --accent:   #2563eb;
+          --accent-bg:#eff6ff;
+          --green:    #059669;
+          --green-bg: #ecfdf5;
+          --orange:   #d97706;
+          --orange-bg:#fffbeb;
+          --red:      #dc2626;
+          --red-bg:   #fef2f2;
+          --mono:     'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+        }
+
+        body {
+          font-family: -apple-system, 'Inter', sans-serif;
+          background: var(--bg);
+          color: var(--text);
+          font-size: 13px;
+          line-height: 1.5;
+          min-height: 100vh;
+        }
+
+        /* ── Top bar ── */
+        .topbar {
+          background: var(--surface);
+          border-bottom: 1px solid var(--border);
+          padding: 0 28px;
+          height: 52px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          position: sticky;
+          top: 0;
+          z-index: 10;
+        }
+
+        .topbar-logo {
+          width: 28px; height: 28px;
+          background: var(--accent);
+          border-radius: 7px;
+          display: flex; align-items: center; justify-content: center;
+          color: white;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+          letter-spacing: -0.5px;
+        }
+
+        .topbar-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text);
+          letter-spacing: -0.01em;
+        }
+
+        .topbar-sub {
+          font-size: 12px;
+          color: var(--hint);
+          margin-left: 2px;
+        }
+
+        .topbar-right {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 11px;
+          font-weight: 500;
+          padding: 3px 9px;
+          border-radius: 20px;
+          border: 1px solid var(--border);
+          color: var(--muted);
+          background: var(--surface);
+          cursor: pointer;
+          text-decoration: none;
+          transition: border-color 0.12s;
+        }
+        .pill:hover { border-color: var(--border2); color: var(--text); }
+
+        .dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: var(--green);
+          flex-shrink: 0;
+          animation: blink 2.5s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 60%{opacity:0.3} }
+
+        /* ── Layout ── */
+        .layout {
+          display: grid;
+          grid-template-columns: 220px 1fr;
+          gap: 0;
+          min-height: calc(100vh - 52px);
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+          border-right: 1px solid var(--border);
+          background: var(--surface);
+          padding: 20px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+
+        .sidebar-section-label {
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--hint);
+          margin-bottom: 8px;
+        }
+
+        .btn-stack { display: flex; flex-direction: column; gap: 6px; }
+
+        .btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text);
+          font-size: 12px;
+          font-weight: 500;
+          font-family: inherit;
+          cursor: pointer;
+          transition: background 0.1s, border-color 0.1s;
+          width: 100%;
+          text-align: left;
+        }
+        .btn:hover { background: var(--bg); border-color: var(--border2); }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .btn-primary {
+          background: var(--accent);
+          border-color: var(--accent);
+          color: white;
+        }
+        .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
+        .btn-icon {
+          width: 16px; height: 16px;
+          flex-shrink: 0;
+          opacity: 0.7;
+        }
+
+        /* ── Activity log ── */
+        .log {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 10px;
+          height: 130px;
+          overflow-y: auto;
+          font-family: var(--mono);
+          font-size: 10.5px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .log-row { display: flex; gap: 6px; line-height: 1.4; }
+        .log-t   { color: var(--hint); flex-shrink: 0; }
+        .log-m   { color: var(--muted); }
+        .log-m.ok   { color: var(--green); }
+        .log-m.err  { color: var(--red); }
+        .log-m.info { color: var(--accent); }
+
+        /* ── Content ── */
+        .content {
+          padding: 20px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        /* ── Cards ── */
+        .card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 16px 18px;
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 14px;
+        }
+
+        .card-label {
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: var(--hint);
+        }
+
+        /* ── Stat grid ── */
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+        }
+
+        .stat {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 12px 14px;
+        }
+
+        .stat-n {
+          font-size: 26px;
+          font-weight: 700;
+          font-family: var(--mono);
+          letter-spacing: -0.04em;
+          line-height: 1;
+          margin-bottom: 5px;
+        }
+
+        .stat-n.blue   { color: var(--accent); }
+        .stat-n.green  { color: var(--green); }
+        .stat-n.orange { color: var(--orange); }
+        .stat-n.red    { color: var(--red); }
+
+        .stat-l {
+          font-size: 11px;
+          color: var(--muted);
+        }
+
+        .duration-line {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          color: var(--muted);
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+        }
+
+        .duration-val {
+          font-family: var(--mono);
+          font-weight: 600;
+          color: var(--green);
+          font-size: 12px;
+        }
+
+        /* ── Run ID chip ── */
+        .run-chip {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--accent);
+          background: var(--accent-bg);
+          border: 1px solid #bfdbfe;
+          padding: 2px 8px;
+          border-radius: 5px;
+        }
+
+        /* ── Tables ── */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+        .tbl-wrap { overflow-x: auto; margin-top: 2px; }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+        }
+
+        th {
+          text-align: left;
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: var(--hint);
+          padding: 6px 10px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        td {
+          padding: 8px 10px;
+          border-bottom: 1px solid #f3f4f6;
+          color: var(--muted);
+          font-family: var(--mono);
+          font-size: 11px;
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--bg); }
+
+        td.sym { color: var(--text); font-weight: 600; font-size: 12px; }
+        td.diff { color: var(--orange); }
+
+        /* ── Badges ── */
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 7px;
+          border-radius: 4px;
+          font-family: var(--mono);
+          letter-spacing: 0.02em;
+        }
+
+        .b-green  { background: var(--green-bg);  color: #065f46; }
+        .b-orange { background: var(--orange-bg); color: #92400e; }
+        .b-red    { background: var(--red-bg);    color: #991b1b; }
+        .b-blue   { background: var(--accent-bg); color: #1e40af; }
+        .b-gray   { background: #f3f4f6;          color: #374151; }
+
+        /* ── Empty ── */
+        .empty {
+          padding: 28px;
+          text-align: center;
+          color: var(--hint);
+          font-size: 12px;
+        }
+
+        /* ── Progress ── */
+        .progress {
+          height: 2px;
+          background: var(--border);
+          border-radius: 1px;
+          overflow: hidden;
+          margin-top: 10px;
+          display: none;
+        }
+
+        .progress-inner {
+          height: 100%;
+          background: var(--accent);
+          border-radius: 1px;
+          animation: slide 1.2s ease-in-out infinite;
+          width: 35%;
+        }
+
+        @keyframes slide {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="topbar-logo">R</div>
+    <div>
+        <span class="topbar-title">Reconciliation Engine</span>
+        <span class="topbar-sub">— Real-Time Fractional Trade Settlement</span>
+    </div>
+    <div class="topbar-right">
+        <span class="pill"><span class="dot"></span>Live</span>
+        <a class="pill" href="/swagger-ui.html" target="_blank">API docs</a>
+        <a class="pill" href="http://localhost:3000" target="_blank">Grafana</a>
+        <a class="pill" href="http://localhost:9090" target="_blank">Prometheus</a>
+    </div>
+</div>
+
+<div class="layout">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+        <div>
+            <div class="sidebar-section-label">Trade source</div>
+            <div class="btn-stack">
+                <button class="btn btn-primary" onclick="placeAlpaca()">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 10 5 6 9 9 15 3"/><polyline points="11 3 15 3 15 7"/></svg>
+                    Place Alpaca orders
+                </button>
+                <button class="btn" onclick="simulate()">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M8 5v6M5 8h6"/></svg>
+                    Simulate 20 trades
+                </button>
+            </div>
+        </div>
+
+        <div>
+            <div class="sidebar-section-label">Engine</div>
+            <div class="btn-stack">
+                <button class="btn" onclick="settle()">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
+                    Generate settlement
+                </button>
+                <button class="btn btn-primary" id="runBtn" onclick="run()">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="4 2 14 8 4 14 4 2"/></svg>
+                    Run reconciliation
+                </button>
+                <div class="progress" id="prog"><div class="progress-inner"></div></div>
+            </div>
+        </div>
+
+        <div style="flex:1">
+            <div class="sidebar-section-label">Activity</div>
+            <div class="log" id="log">
+                <div class="log-row">
+                    <span class="log-t">--:--</span>
+                    <span class="log-m info">Engine ready</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+        <!-- Last run -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Last run</span>
+                <span id="runChip" style="display:none"></span>
+            </div>
+            <div id="lastRun">
+                <div class="empty">No runs yet. Run reconciliation to see results.</div>
+            </div>
+        </div>
+
+        <!-- Tables row -->
+        <div class="two-col">
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-label">Recent breaks</span>
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                        <tr><th>Symbol</th><th>Category</th><th>Status</th><th>Diff</th></tr>
+                        </thead>
+                        <tbody id="breaksBody">
+                        <tr><td colspan="4" class="empty">No breaks yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-label">Run history</span>
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                        <tr><th>Run ID</th><th>Status</th><th>Breaks</th><th>Duration</th></tr>
+                        </thead>
+                        <tbody id="runsBody">
+                        <tr><td colspan="4" class="empty">No runs yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script>
+    function ts() {
+      return new Date().toTimeString().slice(0,5);
+    }
+
+    function addLog(msg, type='') {
+      const el = document.getElementById('log');
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `<span class="log-t">${ts()}</span><span class="log-m ${type}">${msg}</span>`;
+      el.appendChild(row);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function showProgress(v) {
+      document.getElementById('prog').style.display = v ? 'block' : 'none';
+    }
+
+    function badge(s) {
+      const map = {
+        COMPLETED:'b-green', AUTO_RESOLVED:'b-green', RUNNING:'b-blue',
+        FAILED:'b-red', ESCALATED:'b-red', DETECTED:'b-orange',
+        ROUNDING:'b-orange', CRITICAL:'b-red',
+        MISSING_SETTLEMENT:'b-red', MISSING_INTERNAL:'b-red', CLOSED:'b-gray'
+      };
+      return `<span class="badge ${map[s]||'b-gray'}">${s}</span>`;
+    }
+
+    async function call(method, url, label) {
+      addLog(`${label}…`, 'info');
+      try {
+        const r = await fetch(url, { method });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        addLog(`${label} — done`, 'ok');
+        return d;
+      } catch(e) {
+        addLog(`${label} — ${e.message}`, 'err');
+        return null;
+      }
+    }
+
+    async function placeAlpaca() {
+      const d = await call('POST', '/api/alpaca/orders/place-all', 'Placing Alpaca orders');
+      if (d) addLog(`${d.length} orders placed — fills in ~30s`, 'ok');
+    }
+
+    async function simulate() {
+      await call('POST', '/api/trades/simulate/batch?count=20', 'Simulating trades');
+    }
+
+    async function settle() {
+      await call('POST', '/api/settlement/generate', 'Generating settlement');
+    }
+
+    async function run() {
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      showProgress(true);
+      const d = await call('POST', '/api/reconciliation/run', 'Running reconciliation');
+      btn.disabled = false;
+      showProgress(false);
+      if (d) {
+        renderRun(d);
+        addLog(`${d.totalBreaks} breaks · ${d.autoResolved} resolved · ${d.durationMs}ms`, 'ok');
+        loadBreaks();
+        loadRuns();
+      }
+    }
+
+    function renderRun(d) {
+      const chip = document.getElementById('runChip');
+      chip.textContent = d.runId;
+      chip.className = 'run-chip';
+      chip.style.display = 'inline-flex';
+
+      document.getElementById('lastRun').innerHTML = `
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-n blue">${d.totalBreaks}</div>
+            <div class="stat-l">Total breaks</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n green">${d.autoResolved}</div>
+            <div class="stat-l">Auto resolved</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n orange">${d.roundingBreaks}</div>
+            <div class="stat-l">Rounding</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n ${d.criticalBreaks > 0 ? 'red' : 'green'}">${d.criticalBreaks}</div>
+            <div class="stat-l">Critical</div>
+          </div>
+        </div>
+        <div class="duration-line">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polyline points="8 5 8 8 10 10"/></svg>
+          Completed in <span class="duration-val">${d.durationMs}ms</span>
+          &nbsp;·&nbsp; Parallel detection · 180-thread pool · ${d.tradeDate}
+        </div>
+      `;
+    }
+
+    async function loadBreaks() {
+      try {
+        const r = await fetch('/api/reconciliation/breaks');
+        const data = await r.json();
+        const tbody = document.getElementById('breaksBody');
+        if (!data || !data.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No breaks yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.slice(-12).reverse().map(b => `
+          <tr>
+            <td class="sym">${b.symbol}</td>
+            <td>${badge(b.category)}</td>
+            <td>${badge(b.status)}</td>
+            <td class="diff">${b.difference != null ? parseFloat(b.difference).toFixed(8) : '—'}</td>
+          </tr>
+        `).join('');
+      } catch(e) {}
+    }
+
+    async function loadRuns() {
+      try {
+        const r = await fetch('/api/reconciliation/runs');
+        const data = await r.json();
+        const tbody = document.getElementById('runsBody');
+        if (!data || !data.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No runs yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.slice(0,8).map(r => `
+          <tr>
+            <td style="color:var(--accent);font-size:10.5px">${r.runId}</td>
+            <td>${badge(r.status)}</td>
+            <td style="color:var(--text)">${r.breaksDetected ?? '—'}</td>
+            <td style="color:var(--muted)">${r.durationMs ? r.durationMs+'ms' : '—'}</td>
+          </tr>
+        `).join('');
+      } catch(e) {}
+    }
+
+    loadBreaks();
+    loadRuns();
+    setInterval(() => { loadBreaks(); loadRuns(); }, 30000);
+</script>
+</body>
+</html>
